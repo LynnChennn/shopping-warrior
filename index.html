@@ -252,13 +252,44 @@
         <div class="err" id="d-pu-err" hidden>請選擇購買時間</div>
       </div>
       <div class="fld">
-        <label class="lbl" for="d-pu-store">購買店家</label>
+        <label class="lbl" for="d-pu-store">購買地點</label>
         <select class="inp" id="d-pu-store" style="width:100%"></select>
-        <span class="hint">金額依所選店家記錄的價格計算</span>
+        <input class="inp" id="d-pu-other" placeholder="輸入店名或地點，例：松本清 難波店" aria-label="其他購買地點" hidden>
+        <div class="err" id="d-pu-store-err" hidden>請輸入購買地點</div>
+      </div>
+      <div class="fld">
+        <label class="lbl" for="d-pu-amount">實付金額</label>
+        <div class="row">
+          <input class="inp" id="d-pu-amount" inputmode="decimal" autocomplete="off" placeholder="0">
+          <select class="inp" id="d-pu-cur" aria-label="實付金額幣別"></select>
+        </div>
+        <span class="hint" id="d-pu-twd"></span>
+        <div class="err" id="d-pu-amount-err" hidden>請輸入大於 0 的實付金額</div>
       </div>
       <button class="btn danger-line block" type="button" id="d-pu-del">刪除這筆紀錄</button>
     </div>
     <div class="sheet-foot"><button class="btn" type="button" data-close>取消</button><button class="btn primary" type="button" id="d-pu-ok">儲存</button></div>
+  </div>
+</dialog>
+
+<!-- 預算 -->
+<dialog class="sheet" id="d-budget" aria-labelledby="d-budget-h">
+  <div class="sheet-in">
+    <div class="sheet-h"><h2 id="d-budget-h">編輯預算</h2><button class="icon-btn" type="button" data-close aria-label="關閉">✕</button></div>
+    <div class="stack">
+      <div class="fld">
+        <label class="lbl" for="d-budget-in">總預算（新台幣）</label>
+        <div class="row"><span class="cur-static">NT$</span><input class="inp big-in" id="d-budget-in" inputmode="numeric" autocomplete="off" placeholder="例：30000"></div>
+      </div>
+      <div class="fld">
+        <label class="lbl" for="d-budget-jpy">換算日幣</label>
+        <div class="row"><span class="cur-static">¥</span><input class="inp big-in" id="d-budget-jpy" inputmode="numeric" autocomplete="off" placeholder="例：150000"></div>
+        <span class="hint" id="d-budget-rate"></span>
+        <span class="hint">輸入任一欄，另一欄會自動換算。留空代表不設定預算。</span>
+        <div class="err" id="d-budget-err" hidden>請輸入大於 0 的金額，或留空</div>
+      </div>
+    </div>
+    <div class="sheet-foot"><button class="btn" type="button" data-close>取消</button><button class="btn primary" type="button" id="d-budget-ok">儲存</button></div>
   </div>
 </dialog>
 

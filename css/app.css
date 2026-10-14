@@ -263,3 +263,20 @@ dialog.full{width:100%;height:100%;margin:0;max-height:100dvh}
   .toast{animation:up .2s ease-out}@keyframes up{from{transform:translateY(8px);opacity:0}}
   .chip,.tabbar button,.btn{transition:background-color .15s ease-out,color .15s ease-out,border-color .15s ease-out}
 }
+
+/* ---------- 目前戰鬥力（預算進度） ---------- */
+.power{margin-bottom:16px;gap:10px}
+.power-h{justify-content:space-between}
+.power-nums{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+.power-nums b{font-size:28px;line-height:1.2}
+.power-bar{height:14px;border-radius:999px;background:var(--bg);border:1px solid var(--border);overflow:hidden}
+.power-bar span{display:block;height:100%;border-radius:999px;background:#FFD24A}
+.power.over .power-bar span{background:var(--danger)}
+.power .over-text{color:var(--danger);font-weight:700}
+.power-cur{gap:6px}
+.power-cur .chip{min-height:38px;padding:0 12px;font-size:13px}
+.power-act{display:flex;justify-content:flex-end}
+.power-foot .btn{flex:none}
+.power-foot{display:flex;justify-content:space-between;gap:8px;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+.cur-static{flex:none;min-width:64px;height:56px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);font-weight:600}
+@media (prefers-reduced-motion:no-preference){.power-bar span{transition:width .3s ease-out}}

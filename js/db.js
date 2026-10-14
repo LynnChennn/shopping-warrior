@@ -97,4 +97,4 @@ export const removeItem = it => write('items', s => s.delete(it.id));
 export const saveCoupon = c => write('coupons', s => s.put(couponToDoc(c)));
 export const removeCoupon = c => write('coupons', s => s.delete(c.id));
 export const saveImage = (id, blob) => write('images', s => s.put({ id, blob }));
-export const saveSettings = ({ currency, rates, ratesUpdated }) => write('settings', s => s.put({ id: SETTINGS_KEY, currency, rates, ratesUpdated: ratesUpdated || null }));
+export const saveSettings = ({ currency, rates, ratesUpdated, budget, powerCur }) => write('settings', s => s.put({ id: SETTINGS_KEY, currency, rates, ratesUpdated: ratesUpdated || null, budget: budget || null, powerCur: powerCur || 'TWD' }));

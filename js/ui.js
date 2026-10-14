@@ -6,7 +6,7 @@ import { state } from './state.js';
 import { icon, hydrateIcons } from './icons.js';
 import { saveItem, removeItem, saveCoupon, removeCoupon, saveImage, saveSettings, setErrorHandler } from './db.js';
 
-const persistSettings = () => saveSettings({ currency: settings.currency, rates, ratesUpdated: settings.ratesUpdated });
+const persistSettings = () => saveSettings({ currency: settings.currency, rates, ratesUpdated: settings.ratesUpdated, budget: settings.budget, powerCur: settings.powerCur });
 
 const { items, coupons, rates, settings } = state;
 
@@ -297,21 +297,102 @@ function renderList() {
       + sec('已購買', 'z-mint', done, q ? '沒有符合的商品' : '勾選商品前面的方框，就會移到這裡') + '</div>';
   } else {
     const list = pick(listFilter);
-    $('#list').innerHTML = list.length ? `<section class="zone ${listFilter === 'todo' ? 'z-white' : 'z-mint'}">${ul(list)}</section>`
-      : (noResult || `<div class="empty">${listFilter === 'todo' ? '都買齊了 🎉' : '還沒有已購買的商品<br>勾選商品前面的方框，就會移到這裡'}</div>`);
+    $('#list').innerHTML = (listFilter === 'done' ? powerCardHTML() : '')
+      + (list.length ? `<section class="zone ${listFilter === 'todo' ? 'z-white' : 'z-mint'}">${ul(list)}</section>`
+      : (noResult || `<div class="empty">${listFilter === 'todo' ? '都買齊了 🎉' : '還沒有已購買的商品<br>勾選商品前面的方框，就會移到這裡'}</div>`));
   }
 }
+
+// 已購買分頁頂部：目前戰鬥力（已購物 vs. 預算；可切換台幣／日幣顯示，預算以台幣保存）
+function powerTotals(cur) {
+  const budgetTWD = settings.budget;
+  if (cur === 'TWD') return { spent: spendOf(allPurchases()).twd, budget: budgetTWD };
+  // 日幣：日幣購買用實付日幣，其他幣別依目前匯率換算
+  let spent = 0;
+  allPurchases().forEach(({ it, pu }) => {
+    const info = purchaseInfo(it, pu); if (!info) return;
+    spent += info.currency === 'JPY' ? info.amount : info.twd / rates.JPY;
+  });
+  return { spent: Math.round(spent), budget: budgetTWD ? Math.round(budgetTWD / rates.JPY) : null };
+}
+function powerCardHTML() {
+  const cur = settings.powerCur === 'JPY' ? 'JPY' : 'TWD';
+  const money = n => fmtCur(n, cur);
+  const { spent, budget } = powerTotals(cur);
+  const toggle = `<div class="chips power-cur" role="group" aria-label="顯示幣別">
+      <button class="chip sm" type="button" data-powercur="TWD" aria-pressed="${cur === 'TWD'}">台幣</button>
+      <button class="chip sm" type="button" data-powercur="JPY" aria-pressed="${cur === 'JPY'}">日幣</button>
+    </div>`;
+  const head = `<div class="lbl-row power-h"><h2 class="zone-h">目前戰鬥力</h2>${toggle}</div>`;
+  if (!budget) {
+    return `<section class="zone z-white power">${head}
+      <div class="power-nums"><b>${money(spent)}</b><span class="hint">已購物</span></div>
+      <div class="power-foot"><span class="hint">設定總預算後，可以看到還剩多少。</span><button class="btn sm" type="button" data-act="budget">${icon('pen')}設定預算</button></div>
+    </section>`;
+  }
+  const pct = Math.round(spent / budget * 100), over = spent > budget;
+  return `<section class="zone z-white power${over ? ' over' : ''}">${head}
+    <div class="power-nums"><b>${money(spent)}</b><span class="hint">／ 預算 ${money(budget)}</span></div>
+    <div class="power-bar" role="progressbar" aria-label="已購物金額占預算" aria-valuemin="0" aria-valuemax="${budget}" aria-valuenow="${Math.min(spent, budget)}" aria-valuetext="${pct}%">
+      <span style="width:${Math.min(pct, 100)}%"></span>
+    </div>
+    <div class="power-foot">${over ? `<span class="over-text">超出預算 ${money(spent - budget)}</span>` : `<span>還剩 ${money(budget - spent)}</span>`}<span class="hint">已用 ${pct}%</span></div>
+    <div class="power-act"><button class="btn sm" type="button" data-act="budget">${icon('pen')}編輯預算</button></div>
+  </section>`;
+}
+// 預算對話框：台幣與日幣兩欄，輸入任一欄自動換算另一欄（依目前匯率）
+const numOf = el => { const t = el.value.trim().replace(/,/g, ''); return t === '' ? null : parseFloat(t); };
+function openBudget() {
+  $('#d-budget-in').value = settings.budget || '';
+  $('#d-budget-jpy').value = settings.budget ? Math.round(settings.budget / rates.JPY) : '';
+  $('#d-budget-rate').textContent = `依目前匯率 1 JPY = ${rates.JPY} TWD（可在 ⚙️ 設定修改）`;
+  $('#d-budget-err').hidden = true;
+  openD('d-budget'); $('#d-budget-in').focus();
+}
+$('#list').addEventListener('click', e => {
+  if (e.target.closest('[data-act="budget"]')) { openBudget(); return; }
+  const c = e.target.closest('[data-powercur]');
+  if (c) { settings.powerCur = c.dataset.powercur; persistSettings(); renderList(); }
+});
+$('#d-budget-in').addEventListener('input', () => {
+  $('#d-budget-err').hidden = true;
+  const v = numOf($('#d-budget-in'));
+  $('#d-budget-jpy').value = v > 0 ? Math.round(v / rates.JPY) : '';
+});
+$('#d-budget-jpy').addEventListener('input', () => {
+  $('#d-budget-err').hidden = true;
+  const v = numOf($('#d-budget-jpy'));
+  $('#d-budget-in').value = v > 0 ? Math.round(v * rates.JPY) : '';
+});
+$('#d-budget-ok').addEventListener('click', () => {
+  const twd = numOf($('#d-budget-in')), jpy = numOf($('#d-budget-jpy'));
+  const bad = v => v !== null && !(v > 0);
+  if (bad(twd) || bad(jpy)) { $('#d-budget-err').hidden = false; $('#d-budget-in').focus(); return; }
+  settings.budget = twd ? Math.round(twd) : null; persistSettings();
+  closeD('d-budget'); renderList(); toast(twd ? `預算已設為 ${fmtTWD(twd)}（約 ¥ ${Math.round(twd / rates.JPY).toLocaleString('zh-TW')}）` : '已清除預算');
+});
 $$('[data-filter]').forEach(b => b.addEventListener('click', () => { listFilter = b.dataset.filter; renderList(); }));
 $('#list-q').addEventListener('input', e => { listQuery = e.target.value; renderList(); });
 $('#list').addEventListener('click', e => { if (e.target.id === 'clear-q') { listQuery = ''; $('#list-q').value = ''; renderList(); $('#list-q').focus(); } });
 /* ---------- 花費計算 ---------- */
 const purchasePrice = (it, pu) => it.prices.find(x => x.id === pu.priceId) || null;
+// 購買紀錄的地點與金額：手動修改過（pu.amount）就用修改後的值；否則沿用對應的價格紀錄
+function purchaseInfo(it, pu) {
+  const p = purchasePrice(it, pu);
+  if (pu.amount != null) {
+    const rate = pu.rate ?? rates[pu.currency];
+    return { store: pu.store || null, amount: pu.amount, currency: pu.currency, rate,
+      twd: Math.round(pu.amount * (pu.currency === 'TWD' ? 1 : rate)), price: null };
+  }
+  if (!p) return null;
+  return { store: p.store, amount: p.net, currency: p.currency, rate: p.rate, twd: p.twd, price: p };
+}
 function spendOf(list) { // list: [{ it, pu }]
   let twd = 0, missing = 0; const byCur = {};
   list.forEach(({ it, pu }) => {
-    const p = purchasePrice(it, pu);
-    if (!p) { missing++; return; }
-    twd += p.twd; byCur[p.currency] = (byCur[p.currency] || 0) + p.net;
+    const info = purchaseInfo(it, pu);
+    if (!info) { missing++; return; }
+    twd += info.twd; byCur[info.currency] = (byCur[info.currency] || 0) + info.amount;
   });
   return { twd, byCur, count: list.length, missing };
 }
@@ -328,7 +409,7 @@ function openExport() {
   }
   const s = spendOf(all);
   const byStore = new Map();
-  all.forEach(({ it, pu }) => { const p = purchasePrice(it, pu); if (!p) return; const k = storeLabel(p.store); byStore.set(k, (byStore.get(k) || 0) + p.twd); });
+  all.forEach(({ it, pu }) => { const info = purchaseInfo(it, pu); if (!info) return; const k = storeLabel(info.store); byStore.set(k, (byStore.get(k) || 0) + info.twd); });
   const stores = [...byStore.entries()].sort((a, b) => b[1] - a[1]);
   body.innerHTML = `
     <div class="result" style="margin-bottom:12px">
@@ -344,10 +425,10 @@ function openExport() {
 function buildCSV() {
   const head = ['購買日期', '商品', '店家', '原價', '折扣', '退稅', '最終價格', '幣別', '匯率', '台幣'];
   const rows = allPurchases().map(({ it, pu }) => {
-    const p = purchasePrice(it, pu);
-    return [fmtDateTime(pu.at), it.name, p ? storeLabel(p.store) : '未指定店家',
+    const info = purchaseInfo(it, pu), p = info && info.price; // 手動修改過金額時沒有原價／折扣資訊
+    return [fmtDateTime(pu.at), it.name, info ? storeLabel(info.store) : '未指定店家',
       p ? p.listPrice : '', p ? p.discLabel : '', p ? (p.tax ? (p.tax === 0.08 ? '食品 8%' : '用品 10%') : '不退稅') : '',
-      p ? p.net : '', p ? p.currency : '', p ? p.rate : '', p ? p.twd : ''];
+      info ? info.amount : '', info ? info.currency : '', info ? info.rate : '', info ? info.twd : ''];
   });
   const s = spendOf(allPurchases());
   rows.push([], ['合計', '', '', '', '', '', '', '', '', s.twd]);
@@ -421,10 +502,10 @@ function renderItem() {
     <div class="section-h">購買紀錄</div>
     <div class="zone z-white">
     ${it.purchases.length ? `<ul class="hist">${[...it.purchases].sort((a, b) => b.at - a.at).map(pu => {
-      const pp = it.prices.find(x => x.id === pu.priceId);
+      const pi = purchaseInfo(it, pu);
       return `<li>
-        <span class="hist-main">${fmtDateTime(pu.at)}<span class="hint">${pp ? esc(storeLabel(pp.store)) : '未指定店家'}</span></span>
-        <span class="hist-amt">${pp ? `<b>${primaryPrice(pp)}</b>${pp.currency !== 'TWD' ? `<span class="hint">≈ ${fmtTWD(pp.twd)}</span>` : ''}` : '<span class="hint">—</span>'}</span>
+        <span class="hist-main">${fmtDateTime(pu.at)}<span class="hint">${pi ? esc(storeLabel(pi.store)) : '未指定店家'}</span></span>
+        <span class="hist-amt">${pi ? `<b>${fmtCur(pi.amount, pi.currency)}</b>${pi.currency !== 'TWD' ? `<span class="hint">≈ ${fmtTWD(pi.twd)}</span>` : ''}` : '<span class="hint">—</span>'}</span>
         <button class="btn sm" type="button" data-editpu="${pu.id}" aria-label="編輯 ${fmtDateTime(pu.at)} 的購買紀錄">${icon('pen')}編輯</button>
       </li>`;
     }).join('')}</ul>`
@@ -505,22 +586,69 @@ $('#v-item').addEventListener('keydown', e => { if (e.target.id === 'item-name' 
 
 /* ---------- 編輯購買紀錄 ---------- */
 const toLocalInput = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-let puEdit = null; // { it, pu }
+let puEdit = null; // { it, pu, amountTouched }
 function openPurchaseDialog(it, puId) {
   const pu = it.purchases.find(x => x.id === puId); if (!pu) return;
-  puEdit = { it, pu };
+  const info = purchaseInfo(it, pu);
+  puEdit = { it, pu, amountTouched: false };
   $('#d-pu-at').value = toLocalInput(pu.at);
-  $('#d-pu-err').hidden = true;
-  $('#d-pu-store').innerHTML = '<option value="">未指定店家</option>' + sortedPrices(it).map(x =>
-    `<option value="${x.id}" ${x.id === pu.priceId ? 'selected' : ''}>${esc(storeLabel(x.store))}・${primaryPrice(x)}</option>`).join('');
+  // 地點：記錄過的店家（附價格）＋其他；手動輸入過的地點選「其他」並帶入
+  const custom = pu.amount != null && pu.store && !it.prices.some(x => x.id === pu.priceId);
+  $('#d-pu-store').innerHTML = sortedPrices(it).map(x =>
+    `<option value="${x.id}" ${!custom && x.id === pu.priceId ? 'selected' : ''}>${esc(storeLabel(x.store))}・${primaryPrice(x)}</option>`).join('')
+    + `<option value="other" ${custom || !it.prices.length ? 'selected' : ''}>其他地點…</option>`;
+  $('#d-pu-other').value = custom ? storeLabel(pu.store) : '';
+  $('#d-pu-cur').innerHTML = Object.keys(SYM).map(c => `<option value="${c}">${c} ${SYM[c]}</option>`).join('');
+  $('#d-pu-cur').value = info ? info.currency : settings.currency;
+  $('#d-pu-amount').value = info ? info.amount : '';
+  $$('#d-pu .err').forEach(e => e.hidden = true);
+  syncPurchaseDialog();
   openD('d-pu');
 }
+function syncPurchaseDialog() {
+  const other = $('#d-pu-store').value === 'other';
+  $('#d-pu-other').hidden = !other;
+  const amt = parseFloat(String($('#d-pu-amount').value).replace(/,/g, '')), cur = $('#d-pu-cur').value;
+  // 選記錄過的店家且幣別相同時，用當時記錄的匯率；否則用目前匯率（與儲存時的算法一致）
+  const p = puEdit.it.prices.find(x => x.id === $('#d-pu-store').value);
+  const useOld = p && p.currency === cur;
+  $('#d-pu-twd').textContent = amt > 0 && cur !== 'TWD'
+    ? `≈ ${fmtTWD(amt * (useOld ? p.rate : rates[cur]))}（依${useOld ? '記錄當時' : '目前'}匯率）` : '';
+}
+$('#d-pu-store').addEventListener('change', () => {
+  // 選了記錄過的店家且還沒改過金額時，帶入那家店的價格
+  const p = puEdit.it.prices.find(x => x.id === $('#d-pu-store').value);
+  if (p && !puEdit.amountTouched) { $('#d-pu-amount').value = p.net; $('#d-pu-cur').value = p.currency; }
+  $('#d-pu-store-err').hidden = true;
+  syncPurchaseDialog();
+  if ($('#d-pu-store').value === 'other') $('#d-pu-other').focus();
+});
+$('#d-pu-amount').addEventListener('input', () => { puEdit.amountTouched = true; $('#d-pu-amount-err').hidden = true; syncPurchaseDialog(); });
+$('#d-pu-cur').addEventListener('change', () => { puEdit.amountTouched = true; syncPurchaseDialog(); });
+$('#d-pu-other').addEventListener('input', () => { $('#d-pu-store-err').hidden = true; });
 $('#d-pu-ok').addEventListener('click', () => {
   const { it, pu } = puEdit;
   const v = $('#d-pu-at').value;
   const at = v ? new Date(v) : null;
-  if (!at || isNaN(at)) { $('#d-pu-err').hidden = false; $('#d-pu-at').focus(); return; }
-  pu.at = at; pu.priceId = $('#d-pu-store').value || null;
+  const sel = $('#d-pu-store').value, otherName = $('#d-pu-other').value.trim();
+  const amount = parseFloat(String($('#d-pu-amount').value).replace(/,/g, '')), currency = $('#d-pu-cur').value;
+  $('#d-pu-err').hidden = !!(at && !isNaN(at));
+  $('#d-pu-store-err').hidden = !(sel === 'other' && !otherName);
+  $('#d-pu-amount-err').hidden = amount > 0;
+  if (!at || isNaN(at)) { $('#d-pu-at').focus(); return; }
+  if (sel === 'other' && !otherName) { $('#d-pu-other').focus(); return; }
+  if (!(amount > 0)) { $('#d-pu-amount').focus(); return; }
+  pu.at = at;
+  const p = it.prices.find(x => x.id === sel);
+  if (p && p.currency === currency && p.net === amount) {
+    // 和記錄的價格相同：直接連到價格紀錄（保留原價、折扣資訊）
+    pu.priceId = p.id; delete pu.amount; delete pu.currency; delete pu.rate; delete pu.store;
+  } else {
+    pu.priceId = p ? p.id : null;
+    pu.store = p ? p.store : { chainId: null, name: otherName, ja: '', branch: '' };
+    pu.amount = amount; pu.currency = currency;
+    pu.rate = p && p.currency === currency ? p.rate : rates[currency];
+  }
   saveItem(it); closeD('d-pu'); renderItem(); toast('已更新購買紀錄');
 });
 $('#d-pu-del').addEventListener('click', () => {

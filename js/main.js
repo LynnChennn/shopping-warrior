@@ -12,6 +12,8 @@ async function start() {
       Object.assign(state.rates, data.settings.rates);
       state.settings.currency = data.settings.currency || state.settings.currency;
       state.settings.ratesUpdated = data.settings.ratesUpdated || null;
+      state.settings.budget = data.settings.budget || null;
+      state.settings.powerCur = data.settings.powerCur || 'TWD';
     }
   } catch (err) {
     console.error('[main] 讀取資料失敗', err);
