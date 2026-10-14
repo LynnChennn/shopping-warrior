@@ -1,0 +1,12 @@
+{
+  "name": "購物戰士",
+  "short_name": "購物戰士",
+  "description": "購物試算、比價、優惠券與花費紀錄",
+  "lang": "zh-Hant-TW",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ebe8e1",
+  "theme_color": "#ebe8e1"
+}

@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>購物戰士</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#ebe8e1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e0e0d" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-title" content="購物戰士">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="stylesheet" href="css/app.css">
+<script type="module" src="js/main.js"></script>
+</head>
+<body>
+<div class="app" id="app">
+  <header class="topbar">
+    <button class="icon-btn" id="back" type="button" aria-label="返回購物清單" hidden><span data-icon="back"></span>返回</button>
+    <h1 id="title">計算</h1>
+    <button class="icon-btn outline" id="export-btn" type="button" hidden><span data-icon="download"></span>匯出花費</button>
+    <button class="icon-btn" id="settings-btn" type="button" aria-label="設定"><span data-icon="settings"></span></button>
+  </header>
+
+  <main id="main">
+    <!-- 購物清單 -->
+    <section id="v-list" hidden aria-labelledby="title">
+      <div class="filters">
+        <div class="search"><span data-icon="search"></span><input class="inp" type="search" id="list-q" placeholder="搜尋商品名稱" aria-label="搜尋商品名稱" autocomplete="off" enterkeyhint="search"></div>
+        <div class="chips" role="group" aria-label="篩選" style="margin-top:8px">
+          <button class="chip sm" type="button" data-filter="all" aria-pressed="true">全部</button>
+          <button class="chip sm" type="button" data-filter="todo" aria-pressed="false">待買</button>
+          <button class="chip sm" type="button" data-filter="done" aria-pressed="false">已購買</button>
+        </div>
+      </div>
+      <div id="list"></div>
+      <div style="margin-top:16px"><button class="btn block outline" type="button" id="add-item" style="min-height:56px">＋ 新增商品</button></div>
+    </section>
+
+    <!-- 商品詳情 -->
+    <section id="v-item" hidden aria-labelledby="title"></section>
+
+    <!-- 試算 -->
+    <section id="v-calc" aria-labelledby="title">
+      <div class="stack">
+        <div id="calc-form"></div>
+        <button class="btn primary block go" type="button" id="save-price"><span>儲存價格</span><span class="arr" data-icon="check"></span></button>
+      </div>
+    </section>
+
+    <!-- 優惠券 -->
+    <section id="v-coupons" hidden aria-labelledby="title">
+      <div id="coupons"></div>
+      <div style="margin-top:16px"><button class="btn block outline" type="button" id="add-coupon" style="min-height:56px">＋ 新增優惠券</button></div>
+    </section>
+  </main>
+
+  <nav class="tabbar" aria-label="主要分頁">
+    <button type="button" data-tab="list"><span class="ico" data-icon="list"></span>購物清單</button>
+    <button type="button" data-tab="calc" aria-current="page"><span class="ico" data-icon="calc"></span>計算</button>
+    <button type="button" data-tab="coupons"><span class="ico" data-icon="ticket"></span>優惠券</button>
+  </nav>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+</div>
+
+<datalist id="items-dl"></datalist>
+
+<!-- 儲存價格 -->
+<dialog class="sheet" id="d-save" aria-labelledby="d-save-h">
+  <div class="sheet-in">
+    <div class="sheet-h"><h2 id="d-save-h">存到哪個商品？</h2><button class="icon-btn" type="button" data-close aria-label="關閉">✕</button></div>
+    <div class="stack">
+      <div class="card" id="d-save-sum"></div>
+      <div class="fld">
+        <label class="lbl" for="d-save-name">商品名稱</label>
+        <input class="inp" id="d-save-name" list="items-dl" autocomplete="off" placeholder="例：合利他命 EX Plus">
+        <div class="err" id="d-save-err" hidden>請輸入商品名稱</div>
+        <div class="cmp" id="d-save-cmp" aria-live="polite" hidden></div>
+      </div>
+      <div class="fld" id="d-save-recent-wrap">
+        <span class="lbl">或選擇清單中的商品</span>
+        <div class="chips" id="d-save-recent"></div>
+      </div>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn" type="button" data-close>取消</button>
+      <button class="btn primary" type="button" id="d-save-ok">儲存</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- 匯出花費 -->
+<dialog class="sheet" id="d-export" aria-labelledby="d-export-h">
+  <div class="sheet-in">
+    <div class="sheet-h"><h2 id="d-export-h">花費總覽</h2><button class="icon-btn" type="button" data-close aria-label="關閉">✕</button></div>
+    <div id="d-export-body"></div>
+    <div class="sheet-foot"><button class="btn" type="button" data-close>關閉</button><button class="btn primary" type="button" id="d-export-ok">下載 CSV</button></div>
+  </div>
+</dialog>
+
+<!-- 新增商品 -->
+<dialog class="sheet" id="d-item" aria-labelledby="d-item-h">
+  <div class="sheet-in">
+    <div class="sheet-h"><h2 id="d-item-h">新增商品</h2><button class="icon-btn" type="button" data-close aria-label="關閉">✕</button></div>
+    <div class="stack">
+      <div class="fld"><label class="lbl" for="d-item-name">商品名稱（必填）</label><input class="inp" id="d-item-name" autocomplete="off" placeholder="例：EVE 止痛藥 60 錠"><div class="err" id="d-item-err" hidden>請輸入商品名稱</div></div>
+      <div class="fld">
+        <span class="lbl">商品照片（選填）</span>
+        <div class="row">
+          <img class="thumb-lg" id="d-item-prev" alt="" hidden>
+          <label class="btn" style="display:inline-flex;align-items:center;position:relative">📷 拍照／選擇照片<input type="file" accept="image/*" id="d-item-file" class="vh"></label>
+        </div>
+      </div>
+      <div class="fld"><label class="lbl" for="d-item-note">備註（選填）</label><input class="inp" id="d-item-note" placeholder="例：幫媽媽買 2 盒"></div>
+    </div>
+    <div class="sheet-foot"><button class="btn" type="button" data-close>取消</button><button class="btn primary" type="button" id="d-item-ok">新增</button></div>
+  </div>
+</dialog>
+
+<!-- 新增價格 -->
+<dialog class="sheet" id="d-price" aria-labelledby="d-price-h">
+  <div class="sheet-in">
+    <div class="sheet-h"><h2 id="d-price-h">新增價格＋地點</h2><button class="icon-btn" type="button" data-close aria-label="關閉">✕</button></div>
+    <div id="d-price-form"></div>
+    <div class="sheet-foot"><button class="btn" type="button" data-close>取消</button><button class="btn primary" type="button" id="d-price-ok">儲存</button></div>
+  </div>
+</dialog>
+
+<!-- 新增優惠券 -->
+<dialog class="sheet" id="d-coupon" aria-labelledby="d-coupon-h">
+  <div class="sheet-in">
+    <div class="sheet-h"><h2 id="d-coupon-h">新增優惠券</h2><button class="icon-btn" type="button" data-close aria-label="關閉">✕</button></div>
+    <div class="stack">
+      <div class="fld">
+        <span class="lbl">優惠券截圖（必填）</span>
+        <label class="file-btn" id="d-coupon-pick"><input type="file" accept="image/*" id="d-coupon-file"><span><span data-icon="camera"></span> 點這裡拍照或選擇截圖</span></label>
+        <img class="preview" id="d-coupon-prev" alt="已選擇的優惠券截圖預覽" hidden>
+        <button class="link-btn" type="button" id="d-coupon-repick" hidden>重新選擇圖片</button>
+        <div class="err" id="d-coupon-img-err" hidden>請選擇一張圖片</div>
+      </div>
+      <div class="fld">
+        <span class="lbl" id="d-coupon-store-l">使用店家（必填）</span>
+        <div class="chips" role="group" aria-labelledby="d-coupon-store-l" id="d-coupon-stores"></div>
+        <input class="inp" id="d-coupon-other" placeholder="輸入店名" aria-label="其他店名" hidden>
+        <div class="err" id="d-coupon-store-err" hidden>請選擇或輸入店家</div>
+      </div>
+      <div class="fld"><label class="lbl" for="d-coupon-note">備註：使用地點／條件（選填）</label><textarea class="inp" id="d-coupon-note" placeholder="例：全日本分店可用，滿 ¥10,000 折 ¥1,000，需出示護照"></textarea></div>
+    </div>
+    <div class="sheet-foot"><button class="btn" type="button" data-close>取消</button><button class="btn primary" type="button" id="d-coupon-ok">儲存</button></div>
+  </div>
+</dialog>
+
+<!-- 設定 -->
+<dialog class="sheet" id="d-settings" aria-labelledby="d-settings-h">
+  <div class="sheet-in">
+    <div class="sheet-h"><h2 id="d-settings-h">設定</h2><button class="icon-btn" type="button" data-close aria-label="關閉">✕</button></div>
+    <div class="stack">
+      <div class="fld">
+        <label class="lbl" for="set-currency">計算幣別</label>
+        <select class="inp" id="set-currency" style="width:100%"></select>
+        <span class="hint">計算與新增價格使用這個幣別；選日幣時才會出現退稅選項。</span>
+      </div>
+      <div class="section-h" style="margin:8px 0 0">匯率</div>
+      <div class="stack" id="d-set-rates"></div>
+      <div class="hint" id="d-set-updated"></div>
+      <div class="hint">修改後立即生效；已儲存的價格保留當時的匯率，不會跟著改變。</div>
+      <div class="section-h" style="margin:8px 0 0">資料保存</div>
+      <div class="hint" id="d-set-persist"></div>
+      <div class="note-box">資料只存在這支手機，沒有雲端備份。請從<b>主畫面圖示</b>開啟 App；刪除主畫面圖示、清除 Safari 網站資料或換手機時，資料會一併消失。花費紀錄可在「購物清單 › 匯出花費」另存。</div>
+      <div class="hint">圖示：Solar Icon Set（480 Design），授權 CC BY 4.0</div>
+    </div>
+    <div class="sheet-foot"><button class="btn" type="button" data-close>完成</button></div>
+  </div>
+</dialog>
+
+<!-- 編輯購買紀錄 -->
+<dialog class="sheet" id="d-pu" aria-labelledby="d-pu-h">
+  <div class="sheet-in">
+    <div class="sheet-h"><h2 id="d-pu-h">編輯購買紀錄</h2><button class="icon-btn" type="button" data-close aria-label="關閉">✕</button></div>
+    <div class="stack">
+      <div class="fld">
+        <label class="lbl" for="d-pu-at">購買時間</label>
+        <input class="inp" type="datetime-local" id="d-pu-at">
+        <div class="err" id="d-pu-err" hidden>請選擇購買時間</div>
+      </div>
+      <div class="fld">
+        <label class="lbl" for="d-pu-store">購買店家</label>
+        <select class="inp" id="d-pu-store" style="width:100%"></select>
+        <span class="hint">金額依所選店家記錄的價格計算</span>
+      </div>
+      <button class="btn danger-line block" type="button" id="d-pu-del">刪除這筆紀錄</button>
+    </div>
+    <div class="sheet-foot"><button class="btn" type="button" data-close>取消</button><button class="btn primary" type="button" id="d-pu-ok">儲存</button></div>
+  </div>
+</dialog>
+
+<!-- 刪除確認 -->
+<dialog class="sheet" id="d-confirm" aria-labelledby="d-confirm-h" aria-describedby="d-confirm-body">
+  <div class="sheet-in">
+    <h2 id="d-confirm-h" style="font-size:18px;margin:0 0 8px"></h2>
+    <p id="d-confirm-body" style="margin:0;color:var(--muted)"></p>
+    <div class="sheet-foot"><button class="btn" type="button" data-close>取消</button><button class="btn danger-fill" type="button" id="d-confirm-ok"></button></div>
+  </div>
+</dialog>
+
+<!-- 優惠券全螢幕 -->
+<dialog class="full" id="d-view" aria-labelledby="d-view-store">
+  <div class="full-in">
+    <div class="imgwrap"><img id="d-view-img" alt=""></div>
+    <div class="info"><b id="d-view-store"></b><div class="note" id="d-view-note"></div></div>
+    <div class="bar">
+      <button class="btn danger" type="button" id="d-view-del">刪除</button>
+      <button class="btn" type="button" data-close>關閉</button>
+    </div>
+  </div>
+</dialog>
+
+</body>
+</html>
