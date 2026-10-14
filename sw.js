@@ -1,6 +1,6 @@
 // 購物戰士 — Service Worker：離線快取
 // 每次更新 App 檔案後，請把 VERSION 加 1，手機才會下載新版本。
-const VERSION = 14;
+const VERSION = 15;
 const CACHE = `shopping-warrior-v${VERSION}`;
 
 const FILES = [

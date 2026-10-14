@@ -282,7 +282,8 @@ function rowHTML(i) {
 }
 function renderList() {
   $$('[data-filter]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.filter === listFilter)));
-  if (!items.length) { $('#list').innerHTML = `<div class="empty"><div class="big">📝</div>清單是空的<br>在「計算」按「儲存價格」，或點下方「新增商品」</div>`; return; }
+  // 已購買分頁一律顯示目前戰鬥力（清單是空的也可以先設定預算）
+  if (!items.length) { $('#list').innerHTML = (listFilter === 'done' ? powerCardHTML() : '') + `<div class="empty"><div class="big">📝</div>清單是空的<br>在「計算」按「儲存價格」，或點下方「新增商品」</div>`; return; }
   const q = listQuery.trim().toLowerCase();
   const match = i => !q || i.name.toLowerCase().includes(q);
   const pick = status => items.filter(i => i.status === status && match(i)).sort((a, b) => b.updated - a.updated);
