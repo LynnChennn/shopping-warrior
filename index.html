@@ -5,14 +5,82 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>購物戰士</title>
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#ebe8e1" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0e0e0d" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<meta name="theme-color" content="#F7F3EF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#161514" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-title" content="購物戰士">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/splash.css">
 <script type="module" src="js/main.js"></script>
 </head>
 <body>
+<!-- 啟動動畫：載入超過 0.4 秒才顯示（設計：css/splash.css） -->
+<div class="splash" id="splash" role="img" aria-label="購gogo 載入中" hidden>
+  <div class="splash-hero">
+    <svg class="splash-bag" viewBox="100 150 1130 930" aria-hidden="true">
+      <!-- 披風（在袋身後面），用路徑變形做飄動 -->
+      <path fill="var(--splash-cape)" d="M248,478 C215,560 160,620 135,690 C120,735 140,760 172,770 C185,790 195,810 205,815 L262,520 Z">
+        <animate attributeName="d" dur="1s" repeatCount="indefinite" calcMode="spline" keyTimes="0;.5;1" keySplines=".45 0 .55 1;.45 0 .55 1"
+          values="M248,478 C215,560 160,620 135,690 C120,735 140,760 172,770 C185,790 195,810 205,815 L262,520 Z;
+                  M248,478 C205,555 138,600 108,668 C94,712 118,742 155,754 C176,780 192,806 205,815 L262,520 Z;
+                  M248,478 C215,560 160,620 135,690 C120,735 140,760 172,770 C185,790 195,810 205,815 L262,520 Z"/>
+      </path>
+      <path fill="var(--splash-cape-dark)" d="M238,540 C205,615 170,690 152,742 C172,722 205,640 246,565 Z"/>
+      <path fill="var(--splash-cape)" d="M880,480 C930,580 990,630 1080,660 C1170,690 1205,730 1195,770 C1185,800 1150,800 1120,792 C1080,785 1060,820 1040,860 C1010,910 960,920 925,915 Z">
+        <animate attributeName="d" dur=".9s" repeatCount="indefinite" calcMode="spline" keyTimes="0;.25;.5;.75;1" keySplines=".45 0 .55 1;.45 0 .55 1;.45 0 .55 1;.45 0 .55 1"
+          values="M880,480 C930,580 990,630 1080,660 C1170,690 1205,730 1195,770 C1185,800 1150,800 1120,792 C1080,785 1060,820 1040,860 C1010,910 960,920 925,915 Z;
+                  M880,480 C940,560 1010,595 1105,605 C1200,615 1235,655 1225,698 C1215,735 1178,742 1145,738 C1098,735 1072,785 1048,838 C1018,900 962,918 925,915 Z;
+                  M880,480 C930,580 990,630 1080,660 C1170,690 1205,730 1195,770 C1185,800 1150,800 1120,792 C1080,785 1060,820 1040,860 C1010,910 960,920 925,915 Z;
+                  M880,480 C925,592 975,662 1058,702 C1145,745 1175,792 1160,832 C1146,862 1112,860 1088,852 C1055,842 1040,872 1024,896 C1000,926 960,925 925,915 Z;
+                  M880,480 C930,580 990,630 1080,660 C1170,690 1205,730 1195,770 C1185,800 1150,800 1120,792 C1080,785 1060,820 1040,860 C1010,910 960,920 925,915 Z"/>
+      </path>
+      <path fill="var(--splash-cape-dark)" d="M895,520 C935,650 1000,760 1100,795 C1010,800 945,720 910,610 Z">
+        <animate attributeName="d" dur=".9s" repeatCount="indefinite" calcMode="spline" keyTimes="0;.25;.5;.75;1" keySplines=".45 0 .55 1;.45 0 .55 1;.45 0 .55 1;.45 0 .55 1"
+          values="M895,520 C935,650 1000,760 1100,795 C1010,800 945,720 910,610 Z;
+                  M895,520 C945,630 1020,720 1125,745 C1030,758 955,700 910,610 Z;
+                  M895,520 C935,650 1000,760 1100,795 C1010,800 945,720 910,610 Z;
+                  M895,520 C930,660 985,790 1075,840 C990,838 940,740 910,610 Z;
+                  M895,520 C935,650 1000,760 1100,795 C1010,800 945,720 910,610 Z"/>
+      </path>
+      <!-- 袋身 -->
+      <path fill="var(--splash-bag)" d="M300,390 L822,390 C862,390 884,412 888,452 L926,945 C932,1010 890,1055 822,1055 L285,1055 C215,1055 170,1010 178,945 L238,452 C243,412 262,390 300,390 Z"/>
+      <!-- 領口披風 -->
+      <path fill="var(--splash-cape)" d="M232,478 C228,420 262,392 310,390 L812,390 C862,392 892,420 890,470 C780,525 660,545 562,545 C460,545 340,525 232,478 Z"/>
+      <path fill="var(--splash-bag)" d="M290,412 C400,398 720,398 835,412 C800,455 680,478 562,478 C445,478 330,455 290,412 Z"/>
+      <!-- 提把 -->
+      <path fill="none" stroke="var(--splash-handle)" stroke-width="78" stroke-linecap="round" d="M410,428 L414,320 C418,250 470,226 540,226 L600,226 C672,226 708,256 712,320 L716,428"/>
+      <!-- 胸針 -->
+      <circle cx="562" cy="510" r="40" fill="var(--splash-cape)" stroke="var(--splash-cape-dark)" stroke-width="10"/>
+      <!-- 眼睛：睜眼 / 開心 ^^ -->
+      <g class="splash-eyes-open" fill="var(--splash-eye)">
+        <ellipse cx="478" cy="682" rx="40" ry="58" transform="rotate(8 478 682)"/>
+        <ellipse cx="625" cy="688" rx="40" ry="58" transform="rotate(8 625 688)"/>
+      </g>
+      <g class="splash-eyes-happy">
+        <ellipse cx="410" cy="770" rx="44" ry="24" fill="#FF8F7A" opacity=".55"/>
+        <ellipse cx="700" cy="776" rx="44" ry="24" fill="#FF8F7A" opacity=".55"/>
+        <path fill="none" stroke="var(--splash-eye)" stroke-width="24" stroke-linecap="round" d="M440,700 Q478,636 516,700 M587,706 Q625,642 663,706"/>
+      </g>
+    </svg>
+    <div class="splash-shadow" aria-hidden="true"></div>
+  </div>
+  <div class="splash-word" aria-hidden="true">
+    <span class="ch"><img src="img/splash/gou.png" alt=""></span>
+    <span class="ch"><img src="img/splash/g1.png" alt=""></span>
+    <span class="ch"><img src="img/splash/o1.png" alt=""></span>
+    <span class="ch"><img src="img/splash/g2.png" alt=""></span>
+    <span class="ch"><img src="img/splash/o2.png" alt=""></span>
+  </div>
+</div>
+<script>
+  // 載入超過 0.4 秒才顯示啟動動畫，避免快速開啟時閃一下；js/main.js 載入完成後會關閉
+  window.__splashTimer = setTimeout(function () {
+    var s = document.getElementById('splash');
+    if (s) { s.hidden = false; window.__splashShownAt = Date.now(); }
+  }, 400);
+</script>
 <div class="app" id="app">
   <header class="topbar">
     <button class="icon-btn" id="back" type="button" aria-label="返回購物清單" hidden><span data-icon="back"></span>返回</button>

@@ -19,9 +19,24 @@ async function start() {
   }
   const { init, toast } = await import('./ui.js');
   init();
+  hideSplash();
   if (loadFailed) toast('無法讀取已儲存的資料。這次的變更可能無法保存，請確認不是在私密瀏覽模式。');
   requestPersistence();
   registerServiceWorker(toast);
+}
+
+// 關閉啟動動畫：沒出現就直接移除；已出現則至少播到字落定（約 1.8 秒）再淡出，避免只看到一半
+function hideSplash() {
+  clearTimeout(window.__splashTimer);
+  const s = document.getElementById('splash');
+  if (!s) return;
+  if (s.hidden) { s.remove(); return; }
+  const wait = Math.max(0, 1800 - (Date.now() - (window.__splashShownAt || 0)));
+  setTimeout(() => {
+    s.classList.add('is-leaving');
+    s.addEventListener('animationend', () => s.remove(), { once: true });
+    setTimeout(() => s.remove(), 450); // 保險：淡出動畫 0.35 秒後一定移除
+  }, wait);
 }
 
 // 要求瀏覽器長期保存資料（不保證會被同意；結果顯示在設定頁）

@@ -1,6 +1,6 @@
 // 購物戰士 — Service Worker：離線快取
 // 每次更新 App 檔案後，請把 VERSION 加 1，手機才會下載新版本。
-const VERSION = 8;
+const VERSION = 11;
 const CACHE = `shopping-warrior-v${VERSION}`;
 
 const FILES = [
@@ -8,6 +8,7 @@ const FILES = [
   './index.html',
   './manifest.webmanifest',
   './css/app.css',
+  './css/splash.css',
   './js/main.js',
   './js/state.js',
   './js/db.js',
@@ -16,6 +17,15 @@ const FILES = [
   './js/calc.js',
   './js/format.js',
   './js/icons.js',
+  './icons/apple-touch-icon.png',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/favicon-32.png',
+  './img/splash/gou.png',
+  './img/splash/g1.png',
+  './img/splash/o1.png',
+  './img/splash/g2.png',
+  './img/splash/o2.png',
 ];
 
 // 安裝：先把所有檔案存進快取，任何一個失敗就不啟用新版本

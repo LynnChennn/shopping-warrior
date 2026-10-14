@@ -467,7 +467,7 @@ function renderItem() {
         </div>
       </li>`).join('')}</ul>`
     : `<div class="empty"><div class="big">🏷️</div>還沒有價格<br>在店裡看到時記下來，就能自動比價</div>`}
-    <div style="margin-top:14px"><button class="btn primary block go" type="button" id="add-price"><span>${ps.length ? '＋ 新增其他價格' : '＋ 新增價格'}</span><span class="arr">${icon('arrow')}</span></button></div>
+    <div style="margin-top:14px"><button class="btn primary block go" type="button" id="add-price"><span>${ps.length ? '新增其他價格' : '新增價格'}</span><span class="arr">${icon('plus')}</span></button></div>
 
     ${it.purchases.length ? '' : histHTML}
 

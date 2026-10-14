@@ -1,0 +1,95 @@
+/* 購物戰士 — 啟動動畫（購gogo）
+   時間軸：0–0.7s 袋子從下方飛上 → 0.85s 眨眼變開心 ^^ → 1.0s 字一個個落下回彈 → 約 2.0s 起字波浪跳動
+   披風全程飄動。系統開啟「減少動態效果」時只淡入，不飛、不跳。 */
+.splash{
+  --splash-cape:#F45B4B; --splash-cape-dark:#D63E37; --splash-bag:#FFD95A; --splash-handle:#D8820F; --splash-eye:#222;
+  position:fixed;inset:0;z-index:100;background:var(--bg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(16px,4vh,28px);
+  padding:16px;overflow:hidden;
+}
+.splash.is-leaving{animation:splash-out .35s ease-in forwards}
+@keyframes splash-out{to{opacity:0;transform:scale(1.04)}}
+
+/* ---------- 袋子 ---------- */
+.splash-hero{position:relative;width:min(48vw,210px)}
+.splash-bag{display:block;width:100%;height:auto;overflow:visible}
+.splash-shadow{position:absolute;left:50%;bottom:-4%;width:58%;height:7%;margin-left:-29%;border-radius:50%;background:var(--text);opacity:.08}
+
+/* ---------- 字標：每個字依原圖位置排好，分別動畫 ---------- */
+.splash-word{position:relative;width:min(72vw,300px);aspect-ratio:2005/557}
+.splash-word .ch{position:absolute;display:block}
+.splash-word .ch img{display:block;width:100%;height:100%;transform-origin:50% 100%}
+.splash-word .ch:nth-child(1){left:.15%;top:.54%;width:31.62%;height:95.51%;--i:0}
+.splash-word .ch:nth-child(2){left:31.17%;top:17.06%;width:19.2%;height:80.79%;--i:1}
+.splash-word .ch:nth-child(3){left:48.73%;top:17.06%;width:16.71%;height:59.96%;--i:2}
+.splash-word .ch:nth-child(4){left:64.24%;top:14.54%;width:19.9%;height:85.1%;--i:3}
+.splash-word .ch:nth-child(5){left:82.19%;top:15.62%;width:17.71%;height:63.73%;--i:4}
+
+/* 減少動態：整體淡入即可 */
+.splash-hero,.splash-word{animation:splash-fade .4s ease-out both}
+.splash-eyes-happy{opacity:0}
+@keyframes splash-fade{from{opacity:0}}
+
+@media (prefers-reduced-motion:no-preference){
+  .splash-hero,.splash-word{animation:none}
+
+  /* 1. 飛上來：從畫面下方衝上、略超過再落定，落地時壓扁回彈 */
+  .splash-hero{animation:splash-fly .75s cubic-bezier(.2,.8,.3,1) both}
+  @keyframes splash-fly{
+    0%{transform:translateY(70vh) rotate(-8deg) scale(.85)}
+    55%{transform:translateY(-9%) rotate(3deg) scale(1)}
+    72%{transform:translateY(0) rotate(0) scale(1.08,.9)}
+    86%{transform:translateY(-2%) scale(.97,1.04)}
+    100%{transform:translateY(0) scale(1)}
+  }
+  .splash-hero{transform-origin:50% 100%}
+  /* 落定後輕輕上下浮動 */
+  .splash-bag{animation:splash-float 1.6s ease-in-out .8s infinite}
+  @keyframes splash-float{50%{transform:translateY(-4%)}}
+  .splash-shadow{animation:splash-shadow-in .75s ease-out both, splash-shadow-float 1.6s ease-in-out .8s infinite}
+  @keyframes splash-shadow-in{0%,40%{opacity:0;transform:scaleX(.3)}72%{transform:scaleX(1.15)}}
+  @keyframes splash-shadow-float{50%{transform:scaleX(.85);opacity:.05}}
+
+  /* 2. 眼睛：眨一下 → 開心 ^^（加腮紅）→ 再眨回來；之後每 2.6 秒重複 */
+  .splash-eyes-open,.splash-eyes-happy{transform-box:fill-box;transform-origin:50% 50%}
+  .splash-eyes-open{animation:splash-eye-open 2.6s ease-in-out .85s infinite}
+  .splash-eyes-happy{animation:splash-eye-happy 2.6s ease-out .85s infinite}
+  @keyframes splash-eye-open{
+    0%{transform:scaleY(1);opacity:1}
+    5%{transform:scaleY(.1);opacity:1}
+    5.1%,46%{transform:scaleY(.1);opacity:0}
+    46.1%{transform:scaleY(.1);opacity:1}
+    52%,100%{transform:scaleY(1);opacity:1}
+  }
+  @keyframes splash-eye-happy{
+    0%,5%{opacity:0;transform:scale(.5)}
+    5.1%{opacity:1;transform:scale(.5)}
+    11%{transform:scale(1.15)}
+    15%{transform:scale(1)}
+    21%{transform:translateY(-3%)}
+    27%{transform:translateY(0)}
+    45.9%{opacity:1}
+    46%,100%{opacity:0}
+  }
+
+  /* 3. 字：依序從上方落下、落地壓扁、回彈 */
+  .splash-word .ch{animation:splash-drop .7s cubic-bezier(.3,.7,.4,1) calc(1s + var(--i) * .09s) both;transform-origin:50% 100%}
+  @keyframes splash-drop{
+    0%{transform:translateY(-130%) scale(.6);opacity:0}
+    45%{transform:translateY(6%) scale(1.16,.84);opacity:1}
+    62%{transform:translateY(-24%) scale(.94,1.07)}
+    78%{transform:translateY(0) scale(1.06,.94)}
+    90%{transform:translateY(-5%) scale(1)}
+    100%{transform:translateY(0) scale(1);opacity:1}
+  }
+  /* 4. 波浪：每個字輪流跳一下，一路傳過去 */
+  .splash-word .ch img{animation:splash-wave 1.3s ease-in-out calc(2s + var(--i) * .1s) infinite}
+  @keyframes splash-wave{
+    0%{transform:translateY(0) scale(1)}
+    12%{transform:translateY(0) scale(1.06,.94)}
+    26%{transform:translateY(-28%) scale(.94,1.08)}
+    40%{transform:translateY(0) scale(1.1,.9)}
+    48%{transform:translateY(-6%) scale(.98,1.02)}
+    56%,100%{transform:translateY(0) scale(1)}
+  }
+}
