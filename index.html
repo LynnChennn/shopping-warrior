@@ -232,9 +232,17 @@
       <div class="stack" id="d-set-rates"></div>
       <div class="hint" id="d-set-updated"></div>
       <div class="hint">修改後立即生效；已儲存的價格保留當時的匯率，不會跟著改變。</div>
+      <div class="section-h" style="margin:8px 0 0">資料備份</div>
+      <div class="backup-status" id="d-set-backup" aria-live="polite"></div>
+      <div class="row backup-btns">
+        <button class="btn" type="button" id="backup-export">匯出備份</button>
+        <button class="btn" type="button" id="backup-import">從備份還原</button>
+      </div>
+      <input type="file" id="backup-file" accept=".json,application/json" class="vh" aria-label="選擇備份檔">
+      <div class="hint">備份包含商品、價格、購買紀錄、優惠券、圖片與設定。匯出時可選「儲存到檔案」或「雲端硬碟」，存到 iCloud 或 Google 雲端硬碟。</div>
       <div class="section-h" style="margin:8px 0 0">資料保存</div>
       <div class="hint" id="d-set-persist"></div>
-      <div class="note-box">資料只存在這支手機，沒有雲端備份。請從<b>主畫面圖示</b>開啟 App；刪除主畫面圖示、清除 Safari 網站資料或換手機時，資料會一併消失。花費紀錄可在「購物清單 › 匯出花費」另存。</div>
+      <div class="note-box">資料只存在這支手機。請從<b>主畫面圖示</b>開啟 App，並定期「匯出備份」；刪除主畫面圖示、清除 Safari 網站資料或換手機時，可用「從備份還原」找回資料。</div>
       <div class="hint">圖示：Solar Icon Set（480 Design），授權 CC BY 4.0</div>
     </div>
     <div class="sheet-foot"><button class="btn" type="button" data-close>完成</button></div>

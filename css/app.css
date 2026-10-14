@@ -280,3 +280,9 @@ dialog.full{width:100%;height:100%;margin:0;max-height:100dvh}
 .power-foot{display:flex;justify-content:space-between;gap:8px;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
 .cur-static{flex:none;min-width:64px;height:56px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);font-weight:600}
 @media (prefers-reduced-motion:no-preference){.power-bar span{transition:width .3s ease-out}}
+
+/* ---------- 資料備份 ---------- */
+.backup-status{font-size:14px;font-weight:500}
+.backup-status .warnline{display:block;margin-top:2px}
+.backup-btns .btn{flex:1}
+#d-confirm-body{white-space:pre-line}

@@ -4,9 +4,10 @@ import { round, parseCustom, compute, sortedPrices, bestPrice } from './calc.js'
 import { $, $$, esc, uid, fmtCur, fmtTWD, pad, fmtDate, fmtDateTime, storeLabel, mapUrl, primaryPrice, isGoogleMapsUrl } from './format.js';
 import { state } from './state.js';
 import { icon, hydrateIcons } from './icons.js';
-import { saveItem, removeItem, saveCoupon, removeCoupon, saveImage, saveSettings, setErrorHandler } from './db.js';
+import { saveItem, removeItem, saveCoupon, removeCoupon, saveImage, saveSettings, setErrorHandler, exportRaw, replaceAll } from './db.js';
+import { buildBackup, parseBackup, summarize, backupToRaw, backupFileName } from './backup.js';
 
-const persistSettings = () => saveSettings({ currency: settings.currency, rates, ratesUpdated: settings.ratesUpdated, budget: settings.budget, powerCur: settings.powerCur });
+const persistSettings = () => saveSettings({ currency: settings.currency, rates, ratesUpdated: settings.ratesUpdated, budget: settings.budget, powerCur: settings.powerCur, lastBackupAt: settings.lastBackupAt });
 
 const { items, coupons, rates, settings } = state;
 
@@ -790,6 +791,7 @@ function openSettings() {
   $('#d-set-updated').textContent = settings.ratesUpdated ? '上次修改：' + fmtDateTime(new Date(settings.ratesUpdated)) : '目前使用預設匯率';
   $('#d-set-persist').textContent = state.persisted === true ? '✓ 瀏覽器已同意長期保存資料'
     : state.persisted === false ? '瀏覽器尚未同意長期保存資料（從主畫面開啟可提高保存機會）' : '';
+  renderBackupStatus();
   openD('d-settings');
 }
 $('#settings-btn').addEventListener('click', openSettings);
@@ -812,6 +814,73 @@ $('#d-settings').addEventListener('close', () => {
   $$('#d-set-rates [data-cur]').forEach(i => { if (!(parseFloat(i.value) > 0)) i.value = rates[i.dataset.cur]; });
 });
 
+/* ---------- 完整備份／還原 ---------- */
+const BACKUP_REMIND_DAYS = 7;
+function renderBackupStatus() {
+  const at = settings.lastBackupAt;
+  const days = at ? Math.floor((Date.now() - at) / 86400000) : null;
+  $('#d-set-backup').innerHTML = at
+    ? `上次備份：${fmtDateTime(new Date(at))}` + (days >= BACKUP_REMIND_DAYS ? `<span class="warnline">已經 ${days} 天沒有備份，建議現在匯出一份</span>` : '')
+    : '還沒有備份過<span class="warnline">建議匯出一份，存到 Google 雲端硬碟或 iCloud</span>';
+}
+// 分享選單（可存到「檔案」或雲端硬碟）；不支援時直接下載。回傳 true 表示已交出檔案
+async function shareFile(file) {
+  if (navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: file.name }); return true; }
+    catch (err) { if (err.name === 'AbortError') return false; console.warn('[backup] 分享失敗，改為下載', err); }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file); a.download = file.name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  return true;
+}
+let backupBusy = false;
+$('#backup-export').addEventListener('click', async () => {
+  if (backupBusy) return;
+  backupBusy = true; $('#backup-export').disabled = true; $('#backup-export').textContent = '準備中…';
+  try {
+    const backup = await buildBackup(await exportRaw());
+    const file = new File([JSON.stringify(backup)], backupFileName(), { type: 'application/json' });
+    if (await shareFile(file)) {
+      settings.lastBackupAt = backup.exportedAt; persistSettings(); renderBackupStatus();
+      toast(`已匯出備份「${file.name}」`);
+    }
+  } catch (err) {
+    console.error('[backup] 匯出失敗', err);
+    toast('無法匯出備份，請再試一次');
+  } finally {
+    backupBusy = false; $('#backup-export').disabled = false; $('#backup-export').textContent = '匯出備份';
+  }
+});
+$('#backup-import').addEventListener('click', () => { $('#backup-file').value = ''; $('#backup-file').click(); });
+$('#backup-file').addEventListener('change', async e => {
+  const f = e.target.files[0]; if (!f) return;
+  let b;
+  try { b = parseBackup(await f.text()); }
+  catch (err) {
+    const msg = { 'not-backup': '這個檔案不是購物戰士的備份檔', newer: '這個備份來自較新版本的 App，請先更新 App 再還原', broken: '備份檔內容不完整，無法還原' }[err.code] || '無法讀取這個檔案';
+    askConfirm({ title: '無法還原', body: msg + '。目前的資料沒有任何變動。', ok: '知道了', kind: 'info' }, () => {});
+    return;
+  }
+  const n = summarize(b);
+  askConfirm({
+    title: '用這份備份取代目前的資料？',
+    body: `備份時間：${n.exportedAt ? fmtDateTime(n.exportedAt) : '未知'}\n商品 ${n.items} 個、價格 ${n.prices} 筆、購買紀錄 ${n.purchases} 筆\n優惠券 ${n.coupons} 張、圖片 ${n.images} 張\n\n目前手機上的資料會被取代，無法復原。如果不確定，請先「匯出備份」保留目前的資料。`,
+    ok: '取代並還原',
+  }, async () => {
+    try {
+      const raw = backupToRaw(b);
+      raw.settings = { ...(raw.settings || {}), lastBackupAt: b.exportedAt || Date.now() };
+      await replaceAll(raw);
+      location.reload();
+    } catch (err) {
+      console.error('[backup] 還原失敗', err);
+      askConfirm({ title: '還原失敗', body: '備份沒有寫入，目前的資料沒有任何變動。請再試一次。', ok: '知道了', kind: 'info' }, () => {});
+    }
+  });
+});
+
 /* ---------- 地圖連結 ---------- */
 // 找出同一家店（同連鎖或同名、同分店）最近一次儲存的地圖連結
 function savedMapLink(s) {
@@ -826,10 +895,14 @@ function savedMapLink(s) {
 }
 
 /* ---------- 共用：dialog / toast ---------- */
-function askConfirm({ title, body, ok }, onOk) {
+// kind：'danger'（預設，紅色確認＋取消）｜'info'（只有一個「知道了」）
+function askConfirm({ title, body, ok, kind = 'danger' }, onOk) {
+  const info = kind === 'info';
   $('#d-confirm-h').textContent = title; $('#d-confirm-body').textContent = body; $('#d-confirm-ok').textContent = ok;
+  $('#d-confirm-ok').className = info ? 'btn primary' : 'btn danger-fill';
+  $('#d-confirm [data-close]').hidden = info;
   $('#d-confirm-ok').onclick = () => { closeD('d-confirm'); onOk(); };
-  openD('d-confirm'); $('#d-confirm [data-close]').focus();
+  openD('d-confirm'); (info ? $('#d-confirm-ok') : $('#d-confirm [data-close]')).focus();
 }
 function openD(id) { const d = $('#' + id); if (!d.open) d.showModal(); }
 function closeD(id) { const d = $('#' + id); if (d.open) d.close(); }

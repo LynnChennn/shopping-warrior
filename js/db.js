@@ -97,4 +97,32 @@ export const removeItem = it => write('items', s => s.delete(it.id));
 export const saveCoupon = c => write('coupons', s => s.put(couponToDoc(c)));
 export const removeCoupon = c => write('coupons', s => s.delete(c.id));
 export const saveImage = (id, blob) => write('images', s => s.put({ id, blob }));
-export const saveSettings = ({ currency, rates, ratesUpdated, budget, powerCur }) => write('settings', s => s.put({ id: SETTINGS_KEY, currency, rates, ratesUpdated: ratesUpdated || null, budget: budget || null, powerCur: powerCur || 'TWD' }));
+export const saveSettings = ({ currency, rates, ratesUpdated, budget, powerCur, lastBackupAt }) => write('settings', s => s.put({ id: SETTINGS_KEY, currency, rates, ratesUpdated: ratesUpdated || null, budget: budget || null, powerCur: powerCur || 'TWD', lastBackupAt: lastBackupAt || null }));
+
+/* ---------- 備份／還原 ---------- */
+const STORES = ['items', 'coupons', 'images', 'settings'];
+
+// 讀出資料庫原始文件（備份用）
+export async function exportRaw() {
+  const db = await open();
+  const tx = db.transaction(STORES, 'readonly');
+  const [items, coupons, images, settings] = await Promise.all([
+    reqP(tx.objectStore('items').getAll()),
+    reqP(tx.objectStore('coupons').getAll()),
+    reqP(tx.objectStore('images').getAll()),
+    reqP(tx.objectStore('settings').get(SETTINGS_KEY)),
+  ]);
+  return { items, coupons, images, settings: settings || null };
+}
+
+// 以備份內容取代全部資料；在同一個交易中完成，任何一步失敗都會整個取消，原本的資料保持不變
+export async function replaceAll({ items, coupons, images, settings }) {
+  const db = await open();
+  const tx = db.transaction(STORES, 'readwrite');
+  for (const name of STORES) tx.objectStore(name).clear();
+  items.forEach(doc => tx.objectStore('items').put(doc));
+  coupons.forEach(doc => tx.objectStore('coupons').put(doc));
+  images.forEach(im => tx.objectStore('images').put(im));
+  if (settings) tx.objectStore('settings').put({ ...settings, id: SETTINGS_KEY });
+  await done(tx);
+}

@@ -14,6 +14,7 @@ async function start() {
       state.settings.ratesUpdated = data.settings.ratesUpdated || null;
       state.settings.budget = data.settings.budget || null;
       state.settings.powerCur = data.settings.powerCur || 'TWD';
+      state.settings.lastBackupAt = data.settings.lastBackupAt || null;
     }
   } catch (err) {
     console.error('[main] 讀取資料失敗', err);

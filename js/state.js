@@ -6,5 +6,5 @@ export const state = {
   coupons: [],    // 優惠券
   rates: { ...DEFAULT_RATES },
   // budget：總預算（台幣），null = 未設定；powerCur：目前戰鬥力卡片的顯示幣別
-  settings: { currency: 'JPY', ratesUpdated: null, budget: null, powerCur: 'TWD' },
+  settings: { currency: 'JPY', ratesUpdated: null, budget: null, powerCur: 'TWD', lastBackupAt: null },
 };
