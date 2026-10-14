@@ -12,6 +12,7 @@ async function start() {
       Object.assign(state.rates, data.settings.rates);
       state.settings.currency = data.settings.currency || state.settings.currency;
       state.settings.ratesUpdated = data.settings.ratesUpdated || null;
+      state.settings.autoRates = data.settings.autoRates !== false;
       state.settings.budget = data.settings.budget || null;
       state.settings.powerCur = data.settings.powerCur || 'TWD';
       state.settings.lastBackupAt = data.settings.lastBackupAt || null;
@@ -20,9 +21,10 @@ async function start() {
     console.error('[main] 讀取資料失敗', err);
     loadFailed = true;
   }
-  const { init, toast } = await import('./ui.js');
+  const { init, toast, autoUpdateRates } = await import('./ui.js');
   init();
   hideSplash();
+  autoUpdateRates();
   if (loadFailed) toast('無法讀取已儲存的資料。這次的變更可能無法保存，請確認不是在私密瀏覽模式。');
   requestPersistence();
   registerServiceWorker(toast);

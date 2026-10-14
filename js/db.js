@@ -53,13 +53,13 @@ const t = d => (d instanceof Date ? d.getTime() : d);
 const d = n => new Date(n);
 
 const itemToDoc = it => ({
-  id: it.id, name: it.name, note: it.note || '', status: it.status,
+  id: it.id, name: it.name, note: it.note || '', status: it.status, proxy: !!it.proxy,
   imageId: it.imageId || null, updated: t(it.updated),
   prices: it.prices.map(p => ({ ...p, at: t(p.at) })),
   purchases: it.purchases.map(pu => ({ ...pu, at: t(pu.at) })),
 });
 const docToItem = doc => ({
-  ...doc, updated: d(doc.updated), img: null,
+  ...doc, proxy: !!doc.proxy, updated: d(doc.updated), img: null,
   prices: doc.prices.map(p => ({ ...p, at: d(p.at) })),
   purchases: doc.purchases.map(pu => ({ ...pu, at: d(pu.at) })),
 });
@@ -97,7 +97,7 @@ export const removeItem = it => write('items', s => s.delete(it.id));
 export const saveCoupon = c => write('coupons', s => s.put(couponToDoc(c)));
 export const removeCoupon = c => write('coupons', s => s.delete(c.id));
 export const saveImage = (id, blob) => write('images', s => s.put({ id, blob }));
-export const saveSettings = ({ currency, rates, ratesUpdated, budget, powerCur, lastBackupAt }) => write('settings', s => s.put({ id: SETTINGS_KEY, currency, rates, ratesUpdated: ratesUpdated || null, budget: budget || null, powerCur: powerCur || 'TWD', lastBackupAt: lastBackupAt || null }));
+export const saveSettings = ({ currency, rates, ratesUpdated, autoRates, budget, powerCur, lastBackupAt }) => write('settings', s => s.put({ id: SETTINGS_KEY, currency, rates, ratesUpdated: ratesUpdated || null, autoRates: autoRates !== false, budget: budget || null, powerCur: powerCur || 'TWD', lastBackupAt: lastBackupAt || null }));
 
 /* ---------- 備份／還原 ---------- */
 const STORES = ['items', 'coupons', 'images', 'settings'];

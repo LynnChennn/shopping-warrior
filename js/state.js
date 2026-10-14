@@ -6,5 +6,6 @@ export const state = {
   coupons: [],    // 優惠券
   rates: { ...DEFAULT_RATES },
   // budget：總預算（台幣），null = 未設定；powerCur：目前戰鬥力卡片的顯示幣別
-  settings: { currency: 'JPY', ratesUpdated: null, budget: null, powerCur: 'TWD', lastBackupAt: null },
+  // autoRates：開啟 App 時自動更新匯率（手動修改匯率會自動關閉）
+  settings: { currency: 'JPY', ratesUpdated: null, autoRates: true, budget: null, powerCur: 'TWD', lastBackupAt: null },
 };

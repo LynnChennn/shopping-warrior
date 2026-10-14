@@ -6,8 +6,9 @@ import { state } from './state.js';
 import { icon, hydrateIcons } from './icons.js';
 import { saveItem, removeItem, saveCoupon, removeCoupon, saveImage, saveSettings, setErrorHandler, exportRaw, replaceAll } from './db.js';
 import { buildBackup, parseBackup, summarize, backupToRaw, backupFileName } from './backup.js';
+import { fetchRates, AUTO_RATES_MIN_GAP } from './rates.js';
 
-const persistSettings = () => saveSettings({ currency: settings.currency, rates, ratesUpdated: settings.ratesUpdated, budget: settings.budget, powerCur: settings.powerCur, lastBackupAt: settings.lastBackupAt });
+const persistSettings = () => saveSettings({ currency: settings.currency, rates, ratesUpdated: settings.ratesUpdated, autoRates: settings.autoRates, budget: settings.budget, powerCur: settings.powerCur, lastBackupAt: settings.lastBackupAt });
 
 const { items, coupons, rates, settings } = state;
 
@@ -34,7 +35,7 @@ function readImage(file, max, cb) {
 }
 /* ---------- 價格表單（試算頁與新增價格共用） ---------- */
 const forms = new Set();
-function PriceForm(root, { itemId = null } = {}) {
+function PriceForm(root, { itemId = null, budgetLine = false } = {}) {
   const id = 'pf' + uid();
   const st = { price:'', currency:settings.currency, disc:null, custom:'', tax:0, storeChoice:null, otherName:'', branch:'', mapLink:'', linkTouched:false };
   root.innerHTML = `
@@ -81,6 +82,7 @@ function PriceForm(root, { itemId = null } = {}) {
       <div class="twd" data-r="final">—</div>
       <div class="res-foot"><span data-r="finalTwd"></span><span class="save" data-r="save"></span></div>
       <div class="cmp" data-r="cmp" hidden></div>
+      <div class="after-buy" data-r="after" hidden></div>
     </div>
     <div class="fld zone z-white">
       <div class="lbl-row" style="justify-content:space-between">
@@ -160,6 +162,15 @@ function PriceForm(root, { itemId = null } = {}) {
     R('final').textContent = r ? fmtCur(r.net, c) : '—';
     R('finalTwd').textContent = r ? (c === 'TWD' ? '' : '≈ ' + fmtTWD(r.twd)) : '輸入原價後自動計算';
     R('save').textContent = r && r.saveTWD > 0 ? '省 ' + fmtTWD(r.saveTWD) : '';
+
+    // 買下後預算還剩多少（只在計算頁、有設定預算時顯示）
+    const after = R('after'), left = budgetLine && r ? budgetLeftAfter(r, c) : null;
+    after.hidden = left === null;
+    if (left !== null) {
+      const pc = settings.powerCur === 'JPY' ? 'JPY' : 'TWD';
+      after.textContent = left >= 0 ? `買下後還剩 ${fmtCur(left, pc)}` : `買下後會超出預算 ${fmtCur(-left, pc)}`;
+      after.classList.toggle('over', left < 0);
+    }
 
     // 比價提示
     const cmpEl = R('cmp');
@@ -256,7 +267,7 @@ function go(v, itemId) {
   if (v === 'list') renderList();
   if (v === 'item') renderItem();
   if (v === 'coupons') renderCoupons();
-  if (v === 'calc') calcForm.render();
+  if (v === 'calc') { calcForm.render(); renderPowerMini(); }
   $('#title').textContent = v === 'item' ? '商品詳情' : TITLES[v];
   $('#main').scrollTop = 0;
 }
@@ -267,9 +278,21 @@ $('#back').addEventListener('click', () => go('list'));
 const thumbHTML = (it, cls = 'thumb') => it.img ? `<img class="${cls}" src="${it.img}" alt="">` : `<span class="${cls} ph" aria-hidden="true">${icon('bag')}</span>`;
 function rerender() { if (view === 'list') renderList(); if (view === 'item') renderItem(); }
 
+// 回到清單並標示某個商品（新增後使用）：必要時清除搜尋、切換篩選，讓它一定看得到
+let flashId = null;
+function showInList(it) {
+  if (listQuery && !it.name.toLowerCase().includes(listQuery.trim().toLowerCase())) { listQuery = ''; $('#list-q').value = ''; }
+  if (it.proxy) listFilter = 'proxy';
+  else if (listFilter === 'proxy' || (listFilter !== 'all' && listFilter !== it.status)) listFilter = 'all';
+  flashId = it.id;
+  go('list');
+  flashId = null;
+  $(`[data-row="${it.id}"]`)?.scrollIntoView({ block: 'nearest' });
+}
+
 function rowHTML(i) {
   const b = bestPrice(i), done = i.status === 'done';
-  return `<li class="item-row${done ? ' is-done' : ''}">
+  return `<li class="item-row${done ? ' is-done' : ''}${i.id === flashId ? ' flash' : ''}" data-row="${i.id}">
     <label class="check"><input type="checkbox" data-check="${i.id}" ${done ? 'checked' : ''} aria-label="${done ? '移回待買' : '標記為已購買'}：${esc(i.name)}"></label>
     <button class="item-btn" type="button" data-open="${i.id}">
       ${thumbHTML(i)}
@@ -284,13 +307,21 @@ function rowHTML(i) {
 function renderList() {
   $$('[data-filter]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.filter === listFilter)));
   // 已購買分頁一律顯示目前戰鬥力（清單是空的也可以先設定預算）
-  if (!items.length) { $('#list').innerHTML = (listFilter === 'done' ? powerCardHTML() : '') + `<div class="empty"><div class="big">📝</div>清單是空的<br>在「計算」按「儲存價格」，或點下方「新增商品」</div>`; return; }
+  // 代購商品只出現在「代購」分頁；其他分頁只列自己的商品
+  const isProxyTab = listFilter === 'proxy';
+  const pool = items.filter(i => !!i.proxy === isProxyTab);
+  if (!pool.length) {
+    $('#list').innerHTML = isProxyTab
+      ? `<div class="empty"><div class="big">🎁</div>還沒有代購商品<br>點上方「新增商品」，勾選「這是代購」</div>`
+      : (listFilter === 'done' ? powerCardHTML() : '') + `<div class="empty"><div class="big">📝</div>清單是空的<br>在「計算」按「儲存價格」，或點上方「新增商品」</div>`;
+    return;
+  }
   const q = listQuery.trim().toLowerCase();
   const match = i => !q || i.name.toLowerCase().includes(q);
-  const pick = status => items.filter(i => i.status === status && match(i)).sort((a, b) => b.updated - a.updated);
+  const pick = status => pool.filter(i => i.status === status && match(i)).sort((a, b) => b.updated - a.updated);
   const ul = list => `<ul class="list">${list.map(rowHTML).join('')}</ul>`;
   const noResult = q ? `<div class="empty">找不到「${esc(listQuery.trim())}」<br><button class="link-btn" type="button" id="clear-q">清除搜尋</button></div>` : '';
-  if (listFilter === 'all') {
+  if (listFilter === 'all' || isProxyTab) {
     const todo = pick('todo'), done = pick('done');
     if (!todo.length && !done.length) { $('#list').innerHTML = noResult; return; }
     const sec = (title, color, list, emptyText) => `<section class="zone ${color}"><h2 class="zone-h">${title}（${list.length}）</h2>`
@@ -308,19 +339,43 @@ function renderList() {
 // 已購買分頁頂部：目前戰鬥力（已購物 vs. 預算；可切換台幣／日幣顯示，預算以台幣保存）
 function powerTotals(cur) {
   const budgetTWD = settings.budget;
-  if (cur === 'TWD') return { spent: spendOf(allPurchases()).twd, budget: budgetTWD };
+  if (cur === 'TWD') return { spent: spendOf(ownPurchases()).twd, budget: budgetTWD };
   // 日幣：日幣購買用實付日幣，其他幣別依目前匯率換算
   let spent = 0;
-  allPurchases().forEach(({ it, pu }) => {
+  ownPurchases().forEach(({ it, pu }) => {
     const info = purchaseInfo(it, pu); if (!info) return;
     spent += info.currency === 'JPY' ? info.amount : info.twd / rates.JPY;
   });
   return { spent: Math.round(spent), budget: budgetTWD ? Math.round(budgetTWD / rates.JPY) : null };
 }
+// 預算扣掉已購物與這次的價格後還剩多少（依目前戰鬥力的顯示幣別）；沒設定預算回傳 null
+function budgetLeftAfter(r, c) {
+  if (!settings.budget) return null;
+  const cur = settings.powerCur === 'JPY' ? 'JPY' : 'TWD';
+  const { spent, budget } = powerTotals(cur);
+  const cost = cur === 'TWD' ? r.twd : (c === 'JPY' ? r.net : r.twd / rates.JPY);
+  return Math.round(budget - spent - cost);
+}
+// 計算頁頂部的精簡戰鬥力列；點一下到「已購買」看完整卡片
+function renderPowerMini() {
+  const el = $('#power-mini');
+  if (!settings.budget) { el.hidden = true; return; }
+  const cur = settings.powerCur === 'JPY' ? 'JPY' : 'TWD';
+  const { spent, budget } = powerTotals(cur);
+  const pct = Math.round(spent / budget * 100), over = spent > budget;
+  el.hidden = false;
+  el.classList.toggle('over', over);
+  el.setAttribute('aria-label', `目前戰鬥力：${over ? '超出預算 ' + fmtCur(spent - budget, cur) : '還剩 ' + fmtCur(budget - spent, cur)}，已用 ${pct}%。查看已購買`);
+  el.innerHTML = `<span class="pm-row"><span class="hint">戰鬥力</span><b>${over ? '超出 ' + fmtCur(spent - budget, cur) : '還剩 ' + fmtCur(budget - spent, cur)}</b><span class="hint">已用 ${pct}%</span>${icon('chevron')}</span>
+    <span class="power-bar" aria-hidden="true"><span style="width:${Math.min(pct, 100)}%"></span></span>`;
+}
+$('#power-mini').addEventListener('click', () => { listFilter = 'done'; go('list'); });
+
 function powerCardHTML() {
   const cur = settings.powerCur === 'JPY' ? 'JPY' : 'TWD';
   const money = n => fmtCur(n, cur);
   const { spent, budget } = powerTotals(cur);
+  const ex = items.some(i => i.proxy) ? '（不含代購）' : '';
   const toggle = `<div class="chips power-cur" role="group" aria-label="顯示幣別">
       <button class="chip sm" type="button" data-powercur="TWD" aria-pressed="${cur === 'TWD'}">台幣</button>
       <button class="chip sm" type="button" data-powercur="JPY" aria-pressed="${cur === 'JPY'}">日幣</button>
@@ -328,7 +383,7 @@ function powerCardHTML() {
   const head = `<div class="lbl-row power-h"><h2 class="zone-h">目前戰鬥力</h2>${toggle}</div>`;
   if (!budget) {
     return `<section class="zone z-white power">${head}
-      <div class="power-nums"><b>${money(spent)}</b><span class="hint">已購物</span></div>
+      <div class="power-nums"><b>${money(spent)}</b><span class="hint">已購物${ex}</span></div>
       <div class="power-foot"><span class="hint">設定總預算後，可以看到還剩多少。</span><button class="btn sm" type="button" data-act="budget">${icon('pen')}設定預算</button></div>
     </section>`;
   }
@@ -338,7 +393,7 @@ function powerCardHTML() {
     <div class="power-bar" role="progressbar" aria-label="已購物金額占預算" aria-valuemin="0" aria-valuemax="${budget}" aria-valuenow="${Math.min(spent, budget)}" aria-valuetext="${pct}%">
       <span style="width:${Math.min(pct, 100)}%"></span>
     </div>
-    <div class="power-foot">${over ? `<span class="over-text">超出預算 ${money(spent - budget)}</span>` : `<span>還剩 ${money(budget - spent)}</span>`}<span class="hint">已用 ${pct}%</span></div>
+    <div class="power-foot">${over ? `<span class="over-text">超出預算 ${money(spent - budget)}</span>` : `<span>還剩 ${money(budget - spent)}</span>`}<span class="hint">已用 ${pct}%${ex}</span></div>
     <div class="power-act"><button class="btn sm" type="button" data-act="budget">${icon('pen')}編輯預算</button></div>
   </section>`;
 }
@@ -401,6 +456,8 @@ function spendOf(list) { // list: [{ it, pu }]
 function allPurchases() {
   return items.flatMap(it => it.purchases.map(pu => ({ it, pu }))).sort((a, b) => b.pu.at - a.pu.at);
 }
+// 自己的購買紀錄（目前戰鬥力不計入代購）
+const ownPurchases = () => allPurchases().filter(({ it }) => !it.proxy);
 function openExport() {
   const all = allPurchases();
   const body = $('#d-export-body');
@@ -410,6 +467,7 @@ function openExport() {
     openD('d-export'); return;
   }
   const s = spendOf(all);
+  const proxyTWD = spendOf(all.filter(({ it }) => it.proxy)).twd;
   const byStore = new Map();
   all.forEach(({ it, pu }) => { const info = purchaseInfo(it, pu); if (!info) return; const k = storeLabel(info.store); byStore.set(k, (byStore.get(k) || 0) + info.twd); });
   const stores = [...byStore.entries()].sort((a, b) => b[1] - a[1]);
@@ -417,23 +475,26 @@ function openExport() {
     <div class="result" style="margin-bottom:12px">
       <div class="lbl">總花費</div>
       <div class="twd">${fmtTWD(s.twd)}</div>
+      ${proxyTWD ? `<div class="hint">自己 ${fmtTWD(s.twd - proxyTWD)}・代購 ${fmtTWD(proxyTWD)}</div>` : ''}
       <div class="hint">${s.count} 筆購買・${fmtDate(all[all.length - 1].pu.at)} – ${fmtDate(all[0].pu.at)}${s.missing ? `・${s.missing} 筆未指定店家，未計入` : ''}</div>
     </div>
     <div class="section-h" style="margin-top:0">依店家</div>
     <ul class="hist">${stores.map(([k, v]) => `<li><span>${esc(k)}</span><b>${fmtTWD(v)}</b></li>`).join('')}</ul>
-    <p class="hint" style="margin-bottom:0">CSV 檔可用 Excel、Numbers 或 Google 試算表開啟，包含每筆購買的日期、商品、店家、原價、折扣、退稅、最終價格與台幣金額。</p>`;
+    <p class="hint" style="margin-bottom:0">CSV 檔可用 Excel、Numbers 或 Google 試算表開啟，包含每筆購買的日期、商品、是否代購、店家、原價、折扣、退稅、最終價格與台幣金額。</p>`;
   openD('d-export');
 }
 function buildCSV() {
-  const head = ['購買日期', '商品', '店家', '原價', '折扣', '退稅', '最終價格', '幣別', '匯率', '台幣'];
+  const head = ['購買日期', '商品', '代購', '店家', '原價', '折扣', '退稅', '最終價格', '幣別', '匯率', '台幣'];
   const rows = allPurchases().map(({ it, pu }) => {
     const info = purchaseInfo(it, pu), p = info && info.price; // 手動修改過金額時沒有原價／折扣資訊
-    return [fmtDateTime(pu.at), it.name, info ? storeLabel(info.store) : '未指定店家',
+    return [fmtDateTime(pu.at), it.name, it.proxy ? '是' : '', info ? storeLabel(info.store) : '未指定店家',
       p ? p.listPrice : '', p ? p.discLabel : '', p ? (p.tax ? (p.tax === 0.08 ? '食品 8%' : '用品 10%') : '不退稅') : '',
       info ? info.amount : '', info ? info.currency : '', info ? info.rate : '', info ? info.twd : ''];
   });
   const s = spendOf(allPurchases());
-  rows.push([], ['合計', '', '', '', '', '', '', '', '', s.twd]);
+  const proxyTWD = spendOf(allPurchases().filter(({ it }) => it.proxy)).twd;
+  rows.push([], ['合計', '', '', '', '', '', '', '', '', '', s.twd]);
+  if (proxyTWD) rows.push(['其中自己', '', '', '', '', '', '', '', '', '', s.twd - proxyTWD], ['其中代購', '', '', '', '', '', '', '', '', '', proxyTWD]);
   const csv = '﻿' + [head, ...rows].map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
   const d = new Date();
   const name = `購物戰士花費-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}.csv`;
@@ -463,9 +524,9 @@ async function exportCSV() {
 $('#export-btn').addEventListener('click', openExport);
 $('#d-export-ok').addEventListener('click', exportCSV);
 
-function setBought(it, on) {
+function setBought(it, on, priceId) {
   if (on) {
-    const b = bestPrice(it);
+    const b = priceId ? it.prices.find(p => p.id === priceId) : bestPrice(it);
     it.purchases.push({ id:uid(), at:new Date(), priceId:b ? b.id : null });
     it.status = 'done';
     toast(`「${it.name}」已移到已購買`, '復原', () => setBought(it, false));
@@ -481,15 +542,16 @@ $('#list').addEventListener('change', e => { const id = e.target.dataset.check; 
 
 let itemDraftImg = null;
 $('#d-item-file').addEventListener('change', e => readImage(e.target.files[0], 800, im => { itemDraftImg = im; $('#d-item-prev').src = im.url; $('#d-item-prev').hidden = false; }));
-$('#add-item').addEventListener('click', () => { itemDraftImg = null; $('#d-item-prev').hidden = true; $('#d-item-file').value = ''; $('#d-item-name').value = ''; $('#d-item-note').value = ''; $('#d-item-err').hidden = true; openD('d-item'); $('#d-item-name').focus(); });
+$('#add-item').addEventListener('click', () => { itemDraftImg = null; $('#d-item-prev').hidden = true; $('#d-item-file').value = ''; $('#d-item-name').value = ''; $('#d-item-note').value = ''; $('#d-item-proxy').checked = listFilter === 'proxy'; $('#d-item-err').hidden = true; openD('d-item'); $('#d-item-name').focus(); });
 $('#d-item-ok').addEventListener('click', () => {
   const name = $('#d-item-name').value.trim();
   if (!name) { $('#d-item-err').hidden = false; $('#d-item-name').focus(); return; }
   const exist = findItemByName(name);
-  if (exist) { closeD('d-item'); go('item', exist.id); toast(`「${name}」已在清單中`); return; }
-  const it = { id:uid(), name, imageId:null, img:null, note:$('#d-item-note').value.trim(), status:'todo', updated:new Date(), prices:[], purchases:[] };
+  if (exist) { closeD('d-item'); showInList(exist); toast(`「${exist.name}」已在清單中`, '查看', () => go('item', exist.id)); return; }
+  const it = { id:uid(), name, imageId:null, img:null, note:$('#d-item-note').value.trim(), proxy:$('#d-item-proxy').checked, status:'todo', updated:new Date(), prices:[], purchases:[] };
   if (itemDraftImg) { it.imageId = uid(); it.img = itemDraftImg.url; saveImage(it.imageId, itemDraftImg.blob); }
-  items.push(it); saveItem(it); refreshDatalist(); closeD('d-item'); go('item', it.id); toast('已新增商品');
+  items.push(it); saveItem(it); refreshDatalist(); closeD('d-item'); showInList(it);
+  toast(`已新增「${it.name}」`, '查看', () => go('item', it.id));
 });
 
 /* ---------- 商品詳情 ---------- */
@@ -524,11 +586,13 @@ function renderItem() {
       <div class="fld zone z-white name-card">
         <div class="lbl-row" style="justify-content:space-between">
           <label class="lbl" for="item-name">商品名稱</label>
-          <span class="badge ${done ? 'done' : ''}">${done ? '已購買' : '待買'}</span>
+          <span class="badges">${it.proxy ? '<span class="badge proxy">代購</span>' : ''}<span class="badge ${done ? 'done' : ''}">${done ? '已購買' : '待買'}</span></span>
         </div>
         <input class="inp name-inp" id="item-name" value="${esc(it.name)}" autocomplete="off" enterkeyhint="done">
         <div class="err" id="item-name-err" hidden>商品名稱不能空白，已還原為原本的名稱</div>
-        ${it.note ? `<div class="hint">${esc(it.note)}</div>` : ''}
+        <label class="lbl" for="item-note" style="display:block;margin-top:10px">備註（選填）</label>
+        <textarea class="inp note-inp" id="item-note" placeholder="例：幫媽媽買 2 盒">${esc(it.note || '')}</textarea>
+        <label class="switch-row" style="margin-top:10px"><input type="checkbox" id="item-proxy" ${it.proxy ? 'checked' : ''}><span>這是代購<span class="hint" style="display:block">不計入目前戰鬥力；匯出花費會標示為代購</span></span></label>
       </div>
     </div>
 
@@ -545,6 +609,7 @@ function renderItem() {
           <span>${p.currency !== 'TWD' ? '≈ ' + fmtTWD(p.twd) : ''}</span>
         </div>
         <div class="pc-acts">
+          ${done ? '' : `<button class="btn sm" type="button" data-buy="${p.id}" aria-label="在 ${esc(storeLabel(p.store))} 購買">${icon('bag')}在此購買</button>`}
           ${p.store.mapUrl || p.store.ja || p.store.branch ? `<a class="btn sm" href="${mapUrl(p.store)}" target="_blank" rel="noopener" aria-label="在 Google 地圖開啟 ${esc(storeLabel(p.store))}">${icon('pin', 'ic pin')}地圖</a>` : ''}
           <button class="btn sm danger" type="button" data-delprice="${p.id}" aria-label="刪除 ${esc(storeLabel(p.store))} 的價格">${icon('trash')}刪除</button>
         </div>
@@ -561,6 +626,7 @@ $('#v-item').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.id === 'add-price') openPriceDialog(it);
   else if (b.dataset.editpu) openPurchaseDialog(it, b.dataset.editpu);
+  else if (b.dataset.buy) setBought(it, true, b.dataset.buy);
   else if (b.dataset.delprice) {
     const idx = it.prices.findIndex(x => x.id === b.dataset.delprice);
     const [removed] = it.prices.splice(idx, 1); saveItem(it); renderItem();
@@ -580,6 +646,12 @@ $('#v-item').addEventListener('change', e => {
     if (!v) { t.value = it.name; $('#item-name-err').hidden = false; return; }
     $('#item-name-err').hidden = true;
     if (v !== it.name) { it.name = v; it.updated = new Date(); saveItem(it); refreshDatalist(); toast('已更新名稱'); }
+  } else if (t.id === 'item-proxy') {
+    it.proxy = t.checked; it.updated = new Date(); saveItem(it); renderItem();
+    toast(it.proxy ? '已移到代購' : '已移回自己的清單', '復原', () => { it.proxy = !it.proxy; saveItem(it); if (view === 'item') renderItem(); });
+  } else if (t.id === 'item-note') {
+    const v = t.value.trim();
+    if (v !== (it.note || '')) { it.note = v; it.updated = new Date(); saveItem(it); toast('已更新備註'); }
   } else if (t.id === 'item-img') {
     readImage(t.files[0], 800, im => { it.imageId = uid(); it.img = im.url; saveImage(it.imageId, im.blob); saveItem(it); renderItem(); toast('已更新照片'); });
   }
@@ -678,7 +750,7 @@ $('#d-price-ok').addEventListener('click', () => {
 });
 
 /* ---------- 試算 → 儲存價格 ---------- */
-const calcForm = PriceForm($('#calc-form'));
+const calcForm = PriceForm($('#calc-form'), { budgetLine: true });
 let pendingPrice = null;
 $('#save-price').addEventListener('click', () => {
   const p = calcForm.collect(); if (!p) return;
@@ -788,7 +860,8 @@ function openSettings() {
       <input class="inp" id="set-rate-${c}" data-cur="${c}" inputmode="decimal" autocomplete="off" value="${rates[c]}">
       <div class="err" hidden>請輸入大於 0 的匯率</div>
     </div>`).join('');
-  $('#d-set-updated').textContent = settings.ratesUpdated ? '上次修改：' + fmtDateTime(new Date(settings.ratesUpdated)) : '目前使用預設匯率';
+  $('#set-auto-rates').checked = settings.autoRates;
+  renderRatesStatus();
   $('#d-set-persist').textContent = state.persisted === true ? '✓ 瀏覽器已同意長期保存資料'
     : state.persisted === false ? '瀏覽器尚未同意長期保存資料（從主畫面開啟可提高保存機會）' : '';
   renderBackupStatus();
@@ -805,10 +878,38 @@ $('#d-set-rates').addEventListener('input', e => {
   const err = e.target.nextElementSibling;
   err.hidden = v > 0;
   if (!(v > 0)) return;
-  rates[c] = v; settings.ratesUpdated = Date.now(); persistSettings();
-  $('#d-set-updated').textContent = '上次修改：' + fmtDateTime(new Date(settings.ratesUpdated));
+  rates[c] = v; settings.ratesUpdated = Date.now(); settings.autoRates = false; persistSettings();
+  $('#set-auto-rates').checked = false;
+  renderRatesStatus();
   forms.forEach(f => f.render());
 });
+$('#set-auto-rates').addEventListener('change', async e => {
+  settings.autoRates = e.target.checked; persistSettings();
+  if (!settings.autoRates) { renderRatesStatus(); return; }
+  $('#d-set-updated').textContent = '正在更新匯率…';
+  const ok = await autoUpdateRates({ force: true });
+  if (ok) RATE_CURS.forEach(c => { const i = $(`#set-rate-${c}`); if (i) { i.value = rates[c]; i.nextElementSibling.hidden = true; } });
+  renderRatesStatus(ok ? null : '目前無法連線，沿用原本的匯率；下次開啟 App 時會再試一次');
+});
+function renderRatesStatus(extra) {
+  const at = settings.ratesUpdated ? fmtDateTime(new Date(settings.ratesUpdated)) : null;
+  const base = !at ? '目前使用預設匯率'
+    : settings.autoRates ? `自動更新：${at}` : `上次手動修改：${at}（自動更新已關閉）`;
+  $('#d-set-updated').textContent = extra ? `${base}。${extra}` : base;
+}
+// 開啟 App 時自動更新匯率；沒網路或失敗時安靜沿用原本的匯率。回傳是否更新成功
+export async function autoUpdateRates({ force = false } = {}) {
+  if (!settings.autoRates) return false;
+  if (!force && settings.ratesUpdated && Date.now() - settings.ratesUpdated < AUTO_RATES_MIN_GAP) return false;
+  if (navigator.onLine === false) return false;
+  const next = await fetchRates(RATE_CURS);
+  if (!next || !settings.autoRates) return false;
+  Object.assign(rates, next); settings.ratesUpdated = Date.now(); persistSettings();
+  forms.forEach(f => f.render());
+  if (view === 'list') renderList();
+  renderPowerMini();
+  return true;
+}
 // 關閉時把無效的輸入還原成目前匯率
 $('#d-settings').addEventListener('close', () => {
   $$('#d-set-rates [data-cur]').forEach(i => { if (!(parseFloat(i.value) > 0)) i.value = rates[i.dataset.cur]; });
